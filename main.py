@@ -14,9 +14,24 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 import re
 
+def get_openai_client():
+  api_key = st.secrets.get("Openai_api") or os.getenv("OPENAI_API_KEY") or st.session_state.get("openai_api_key")
+  if not api_key:
+    raise ValueError("OpenAI API Key is missing. Please provide it in the secrets or sidebar.")
+  return AsyncOpenAI(api_key=api_key)
+
+def get_mistral_client():
+  api_key = st.secrets.get("Mistral_api") or os.getenv("MISTRAL_API_KEY") or st.session_state.get("mistral_api_key")
+  if not api_key:
+    raise ValueError("Mistral/OpenRouter API Key is missing. Please provide it in the secrets or sidebar.")
+  return AsyncOpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=api_key
+  )
+
 async def get_response(chapter, font_size, lineheight, language, font_style, font_path):
   # Set up OpenAI API client
-  client = AsyncOpenAI(api_key = st.secrets["Openai_api"])
+  client = get_openai_client()
   font_size_px = f"{font_size}px"
   line_height_val = str(lineheight)
   max_chars = 35000
@@ -243,10 +258,7 @@ This is the sample HTML : <!DOCTYPE html>
     if chat_completion.choices[0].finish_reason != "content_filter":
         response = chat_completion.choices[0].message.content
     else:
-        client = AsyncOpenAI(
-          base_url="https://openrouter.ai/api/v1",
-          api_key = st.secrets["Mistral_api"],
-        )
+        client = get_mistral_client()
         
         chat_completion = await client.chat.completions.create(
           model="mistralai/codestral-2501",
@@ -487,10 +499,7 @@ This is the sample HTML : <!DOCTYPE html>
         if chat_completion_1.choices[0].finish_reason != "content_filter":
             response_1 = chat_completion_1.choices[0].message.content
         else:
-            client = AsyncOpenAI(
-              base_url="https://openrouter.ai/api/v1",
-              api_key = st.secrets["Mistral_api"],
-            )
+            client = get_mistral_client()
             
             chat_completion_1 = await client.chat.completions.create(
               model="mistralai/codestral-2501",
@@ -549,10 +558,7 @@ This is the sample HTML : <!DOCTYPE html>
         if chat_completion_2.choices[0].finish_reason != "content_filter":
             response_2 = chat_completion_2.choices[0].message.content
         else:
-            client = AsyncOpenAI(
-              base_url="https://openrouter.ai/api/v1",
-              api_key = st.secrets["Mistral_api"],
-            )
+            client = get_mistral_client()
             
             chat_completion_2 = await client.chat.completions.create(
               model="mistralai/codestral-2501",
@@ -813,10 +819,7 @@ This is the sample HTML : <!DOCTYPE html>
         if chat_completion_1.choices[0].finish_reason != "content_filter":
             response_1 = chat_completion_1.choices[0].message.content
         else:
-            client = AsyncOpenAI(
-              base_url="https://openrouter.ai/api/v1",
-              api_key = st.secrets["Mistral_api"],
-            )
+            client = get_mistral_client()
             
             chat_completion_1 = await client.chat.completions.create(
               model="mistralai/codestral-2501",
@@ -873,10 +876,7 @@ This is the sample HTML : <!DOCTYPE html>
         if chat_completion_2.choices[0].finish_reason != "content_filter":
             response_2 = chat_completion_2.choices[0].message.content
         else:
-            client = AsyncOpenAI(
-              base_url="https://openrouter.ai/api/v1",
-              api_key = st.secrets["Mistral_api"],
-            )
+            client = get_mistral_client()
             
             chat_completion_2 = await client.chat.completions.create(
               model="mistralai/codestral-2501",
@@ -933,10 +933,7 @@ This is the sample HTML : <!DOCTYPE html>
         if chat_completion_3.choices[0].finish_reason != "content_filter":
             response_3 = chat_completion_3.choices[0].message.content
         else:
-            client = AsyncOpenAI(
-              base_url="https://openrouter.ai/api/v1",
-              api_key = st.secrets["Mistral_api"],
-            )
+            client = get_mistral_client()
             
             chat_completion_3 = await client.chat.completions.create(
               model="mistralai/codestral-2501",

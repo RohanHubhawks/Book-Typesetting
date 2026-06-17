@@ -1,7 +1,12 @@
+import sys
+import asyncio
+
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 import streamlit as st
 import nest_asyncio
 from playwright.async_api import async_playwright
-import asyncio
 from main import get_response, save_response, get_pdf_page_count, create_overlay_pdf, overlay_headers_footers, modify_element
 from concurrent.futures import ThreadPoolExecutor
 from reportlab.pdfgen import canvas
@@ -11,43 +16,71 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from bs4 import BeautifulSoup
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # Setup Google Sheets API client using credentials from secrets
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds_dict = {
-        "type": st.secrets["type"],
-        "project_id": st.secrets["project_id"],
-        "private_key_id": st.secrets["private_key_id"],
-        "private_key": st.secrets["private_key"],
-        "client_email": st.secrets["client_email"],
-        "client_id": st.secrets["client_id"],
-        "auth_uri": st.secrets["auth_uri"],
-        "token_uri": st.secrets["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": st.secrets["client_x509_cert_url"]
-    }
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
-    return client
+    try:
+        creds_dict = {
+            "type": st.secrets["type"],
+            "project_id": st.secrets["project_id"],
+            "private_key_id": st.secrets["private_key_id"],
+            "private_key": st.secrets["private_key"],
+            "client_email": st.secrets["client_email"],
+            "client_id": st.secrets["client_id"],
+            "auth_uri": st.secrets["auth_uri"],
+            "token_uri": st.secrets["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["client_x509_cert_url"]
+        }
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        return client
+    except Exception:
+        return None
 
 # Access the Google Sheet
 def get_google_sheet(client, spreadsheet_url):
-    sheet = client.open_by_url(spreadsheet_url).sheet1  # Opens the first sheet
-    return sheet
+    if client is None:
+        return None
+    try:
+        sheet = client.open_by_url(spreadsheet_url).sheet1  # Opens the first sheet
+        return sheet
+    except Exception:
+        return None
 
 # Read the password from the first cell
 def read_password_from_sheet(sheet):
-    password = sheet.cell(1, 1).value  # Reads the first cell (A1)
-    return password
+    if sheet is None:
+        return None
+    try:
+        password = sheet.cell(1, 1).value  # Reads the first cell (A1)
+        return password
+    except Exception:
+        return None
 
 # Update the password in the first cell
 def update_password_in_sheet(sheet, new_password):
-    sheet.update_cell(1, 1, new_password)  # Updates the first cell (A1) with the new password
+    if sheet is None:
+        return
+    try:
+        sheet.update_cell(1, 1, new_password)  # Updates the first cell (A1) with the new password
+    except Exception:
+        pass
 
 # Initialize gspread client and access the sheet
-client = get_gspread_client()
-sheet = get_google_sheet(client, st.secrets["spreadsheet"])
-PASSWORD = read_password_from_sheet(sheet)
+local_mode = False
+try:
+    client = get_gspread_client()
+    sheet = get_google_sheet(client, st.secrets.get("spreadsheet"))
+    PASSWORD = read_password_from_sheet(sheet)
+    if PASSWORD is None:
+        raise ValueError("Password is None")
+except Exception:
+    local_mode = True
+    PASSWORD = os.getenv("APP_PASSWORD", "admin")
 
 # Initialize session state for authentication
 if 'authenticated' not in st.session_state:
@@ -67,9 +100,12 @@ def reset_password(new_password, confirm_password):
         st.error("Passwords do not match!")
     else:
         st.session_state['password'] = new_password
-        update_password_in_sheet(sheet, new_password)
+        if not local_mode:
+            update_password_in_sheet(sheet, new_password)
+            st.success("Password reset successfully!")
+        else:
+            st.success("Password reset successfully (local session only)!")
         st.session_state['reset_mode'] = False
-        st.success("Password reset successfully!")
 
 # Authentication block
 if not st.session_state['authenticated']:
@@ -105,6 +141,33 @@ if st.session_state['reset_mode']:
         st.session_state['reset_mode'] = False
 
 if st.session_state['authenticated'] and not st.session_state['reset_mode']:
+    # Show warning if running in local mode
+    if local_mode:
+        st.sidebar.warning("⚠️ Running in Local Mode (Offline/No Google Sheets)")
+    
+    # API Keys Configuration in Sidebar
+    st.sidebar.header("API Keys Configuration")
+    
+    # Try to get OpenAI API key
+    openai_key = st.secrets.get("Openai_api") or os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        openai_key = st.sidebar.text_input("OpenAI API Key:", type="password", value=st.session_state.get("openai_api_key", ""))
+        if openai_key:
+            st.session_state["openai_api_key"] = openai_key
+    else:
+        st.session_state["openai_api_key"] = openai_key
+        st.sidebar.success("✅ OpenAI API Key loaded")
+
+    # Try to get OpenRouter (Mistral) API key
+    mistral_key = st.secrets.get("Mistral_api") or os.getenv("MISTRAL_API_KEY")
+    if not mistral_key:
+        mistral_key = st.sidebar.text_input("OpenRouter (Mistral) API Key:", type="password", value=st.session_state.get("mistral_api_key", ""))
+        if mistral_key:
+            st.session_state["mistral_api_key"] = mistral_key
+    else:
+        st.session_state["mistral_api_key"] = mistral_key
+        st.sidebar.success("✅ OpenRouter API Key loaded")
+
     # Install Playwright if needed
     os.system('playwright install')
 
